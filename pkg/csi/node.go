@@ -8,7 +8,6 @@ package csi
 import (
 	"context"
 	"fmt"
-	"github.com/vmware/cloud-director-named-disk-csi-driver/pkg/util"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,6 +16,7 @@ import (
 
 	"github.com/akutz/gofsutil"
 	"github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/vmware/cloud-director-named-disk-csi-driver/pkg/util"
 	"golang.org/x/sys/unix"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -27,7 +27,7 @@ const (
 	// The maximum number of volumes that a node can have attached.
 	// Since we're using bus 1 only, it allows up-to 16 disks of which one (#7)
 	// is pre-allocated for the HBA. Hence we have only 15 disks.
-	maxVolumesPerNode = 15
+	maxVolumesPerNode = 42
 
 	DevDiskPath          = "/dev/disk/by-path"
 	ScsiHostPath         = "/sys/class/scsi_host"
