@@ -1,5 +1,6 @@
 LINT_VERSION := 1.51.2
 GOSEC_VERSION := "v2.16.0"
+COMMIT_SHA = $(shell git rev-parse --short HEAD)
 
 GOLANGCI_EXIT_CODE ?= 1
 # Set PATH to pick up cached tools. The additional 'sed' is required for cross-platform support of quoting the args to 'env'
@@ -108,6 +109,7 @@ integration-test: test
 
 .PHONY: build
 build: bin ## Build CSI binary. To be used from within a Dockerfile
+	rm -f bin/cloud-director-named-disk-csi-driver
 	GOOS=$(OS) GOARCH=$(ARCH) CGO_ENABLED=$(CGO) go build -ldflags "-s -w -X github.com/vmware/cloud-director-named-disk-csi-driver/version.Version=$(VERSION)" -o bin/cloud-director-named-disk-csi-driver cmd/csi/main.go
 
 .PHONY: docker-build-csi
@@ -127,8 +129,15 @@ docker-build-artifacts: release-prep
 		--tag $(REGISTRY)/$(ARTIFACT_IMG):$(VERSION) \
 		.
 
+# .PHONY: docker-build
+# docker-build: docker-build-csi docker-build-artifacts ## Build CSI docker image and artifact image.
 .PHONY: docker-build
-docker-build: docker-build-csi docker-build-artifacts ## Build CSI docker image and artifact image.
+docker-build:
+	docker build -t ngcaas-docker-local.artifactory.swisscom.com/swisscom/vcloud-csi:${COMMIT_SHA} .
+
+.PHONY: docker-push
+docker-push: build docker-build
+	docker push ngcaas-docker-local.artifactory.swisscom.com/swisscom/vcloud-csi:${COMMIT_SHA}
 
 ##@ Publish
 

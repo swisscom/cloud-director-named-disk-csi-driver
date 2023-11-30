@@ -8,14 +8,14 @@ package csi
 import (
 	"context"
 	"fmt"
-	"github.com/vmware/cloud-director-named-disk-csi-driver/pkg/util"
-	"github.com/vmware/cloud-director-named-disk-csi-driver/pkg/vcdcsiclient"
-	"github.com/vmware/cloud-director-named-disk-csi-driver/version"
-	"github.com/vmware/cloud-provider-for-cloud-director/pkg/vcdsdk"
 	"net"
 	"os"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/vmware/cloud-director-named-disk-csi-driver/pkg/util"
+	"github.com/vmware/cloud-director-named-disk-csi-driver/pkg/vcdcsiclient"
+	"github.com/vmware/cloud-director-named-disk-csi-driver/version"
+	"github.com/vmware/cloud-provider-for-cloud-director/pkg/vcdsdk"
 	"google.golang.org/grpc"
 	"k8s.io/klog"
 )
@@ -109,13 +109,17 @@ func NewDriver(nodeID string, endpoint string) (*VCDDriver, error) {
 }
 
 // Setup will setup the driver and add controller, node and identity servers
-func (d *VCDDriver) Setup(diskManager *vcdcsiclient.DiskManager, VAppName string, nodeID string, upgradeRde bool) error {
+func (d *VCDDriver) Setup(diskManager *vcdcsiclient.DiskManager, VAppName string, nodeID string, upgradeRde, noCredentials bool) error {
 	klog.Infof("Driver setup called")
 	d.ns = NewNodeService(d, nodeID)
 	d.cs = NewControllerService(d, diskManager.VCDClient, diskManager.ClusterID, VAppName)
 	d.ids = NewIdentityServer(d)
 	if !upgradeRde {
 		klog.Infof("Skipping RDE CSI section upgrade as upgradeRde flag is false")
+		return nil
+	}
+	if noCredentials {
+		klog.Infof("Skipping vCD API interaction as we dont have any credentials")
 		return nil
 	}
 	if !vcdsdk.IsValidEntityId(diskManager.ClusterID) {

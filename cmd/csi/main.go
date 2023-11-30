@@ -8,16 +8,16 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/vmware/cloud-director-named-disk-csi-driver/pkg/config"
-	"github.com/vmware/cloud-director-named-disk-csi-driver/pkg/csi"
-	"github.com/vmware/cloud-director-named-disk-csi-driver/pkg/vcdcsiclient"
-	"github.com/vmware/cloud-director-named-disk-csi-driver/version"
-	"github.com/vmware/cloud-provider-for-cloud-director/pkg/vcdsdk"
 	"os"
 	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"github.com/vmware/cloud-director-named-disk-csi-driver/pkg/config"
+	"github.com/vmware/cloud-director-named-disk-csi-driver/pkg/csi"
+	"github.com/vmware/cloud-director-named-disk-csi-driver/pkg/vcdcsiclient"
+	"github.com/vmware/cloud-director-named-disk-csi-driver/version"
+	"github.com/vmware/cloud-provider-for-cloud-director/pkg/vcdsdk"
 	"k8s.io/component-base/logs"
 	"k8s.io/klog"
 )
@@ -27,6 +27,7 @@ var (
 	nodeIDFlag      string
 	cloudConfigFlag string
 	upgradeRDEFlag  bool
+	noCredentials   bool
 )
 
 func init() {
@@ -34,7 +35,6 @@ func init() {
 }
 
 func main() {
-
 	if version.Version == "" {
 		panic(fmt.Errorf("the Version should be set by flags during compilation"))
 	}
@@ -75,6 +75,8 @@ func main() {
 	// add this flag to distinguish between node plugin and csi controller. Ensure RDE upgrade only happens in csi controller
 	cmd.PersistentFlags().BoolVar(&upgradeRDEFlag, "upgrade-rde", false, "CSI upgrade rde")
 
+	cmd.PersistentFlags().BoolVar(&noCredentials, "no-credentials", false, "CSI without credentials")
+
 	cmd.PersistentFlags().StringVar(&endpointFlag, "endpoint", "", "CSI endpoint")
 	cmd.MarkPersistentFlagRequired("endpoint")
 
@@ -92,7 +94,6 @@ func main() {
 }
 
 func runCommand() {
-
 	d, err := csi.NewDriver(nodeIDFlag, endpointFlag)
 	if err != nil {
 		panic(fmt.Errorf("unable to create new driver: [%v]", err))
@@ -114,31 +115,36 @@ func runCommand() {
 		panic(fmt.Errorf("unable to parse configuration: [%v]", err))
 	}
 
-	for {
-		err = config.SetAuthorization(cloudConfig)
-		if err == nil {
-			break
-		}
+	if !noCredentials {
+		for {
+			err = config.SetAuthorization(cloudConfig)
+			if err == nil {
+				break
+			}
 
-		waitTime := 10 * time.Second
-		klog.Infof("Unable to set authorization in config: [%v]", err)
-		klog.Infof("Waiting for [%v] before trying again...", waitTime)
-		time.Sleep(waitTime)
+			waitTime := 10 * time.Second
+			klog.Infof("Unable to set authorization in config: [%v]", err)
+			klog.Infof("Waiting for [%v] before trying again...", waitTime)
+			time.Sleep(waitTime)
+		}
 	}
 
-	vcdClient, err := vcdsdk.NewVCDClientFromSecrets(
-		cloudConfig.VCD.Host,
-		cloudConfig.VCD.Org,
-		cloudConfig.VCD.VDC,
-		cloudConfig.VCD.UserOrg,
-		cloudConfig.VCD.User,
-		cloudConfig.VCD.Secret,
-		cloudConfig.VCD.RefreshToken,
-		true,
-		true,
-	)
-	if err != nil {
-		panic(fmt.Errorf("unable to initiate vcd client: [%v]", err))
+	var vcdClient *vcdsdk.Client
+	if !noCredentials {
+		vcdClient, err = vcdsdk.NewVCDClientFromSecrets(
+			cloudConfig.VCD.Host,
+			cloudConfig.VCD.Org,
+			cloudConfig.VCD.VDC,
+			cloudConfig.VCD.UserOrg,
+			cloudConfig.VCD.User,
+			cloudConfig.VCD.Secret,
+			cloudConfig.VCD.RefreshToken,
+			true,
+			true,
+		)
+		if err != nil {
+			panic(fmt.Errorf("unable to initiate vcd client: [%v]", err))
+		}
 	}
 
 	if cloudConfig.ClusterID == "" {
@@ -149,7 +155,7 @@ func runCommand() {
 	if err = d.Setup(&vcdcsiclient.DiskManager{
 		VCDClient: vcdClient,
 		ClusterID: cloudConfig.ClusterID,
-	}, cloudConfig.VCD.VAppName, nodeID, upgradeRDEFlag); err != nil {
+	}, cloudConfig.VCD.VAppName, nodeID, upgradeRDEFlag, noCredentials); err != nil {
 		panic(fmt.Errorf("error while setting up driver: [%v]", err))
 	}
 
